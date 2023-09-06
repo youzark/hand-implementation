@@ -1,8 +1,13 @@
 import torch
-from torch import nn, std
+from torch import nn
+from torch.nn import ReLU
 
 class BasicConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size = 3, stride = 1, activation = nn.ReLU()):
+    """
+    wrap up (Conv2d -> BatchNorm2d -> activation(ReLU)) in one Module
+    notice, no activation is needed before residual connection, just set activation to None
+    """
+    def __init__(self, in_channels, out_channels, kernel_size = 3, stride = 1, activation: ReLU | None = nn.ReLU()):
         super().__init__()
         self.convolution = nn.Conv2d(
             in_channels = in_channels,
@@ -23,8 +28,8 @@ class BasicConvLayer(nn.Module):
     
 class ResNetEmbedding(nn.Module):
     """
-    batch data : (Batch, Weight, Height, Channel) ->
-    Embedding  : (Batch, Weight, Height, Feature Dimension)
+    batch data : (Batch, Channel, Height, Width) ->
+    Embedding  : (Batch, Feature Dimension, Height, Width)
     with a convolutional layer and a max pooling
     """
     def __init__(self, image_channels, hidden_channels):
@@ -52,6 +57,7 @@ class ResNetShortCuts(nn.Module):
     so that we can perform residual connection in that layer
     """
     def __init__(self, in_channels, out_channels, stride = 1):
+        super().__init__()
         self.need_projection = (in_channels != out_channels) or (stride != 1)
         self.conv = BasicConvLayer(
             in_channels= in_channels,
@@ -94,7 +100,8 @@ class ResNetBottleNeckLayer(nn.Module):
             BasicConvLayer(
                 in_channels=self.reduced_channels,
                 out_channels=out_channels,
-                kernel_size=1
+                kernel_size=1,
+                activation=None
             ),
         )
         self.activation = activation
@@ -114,6 +121,7 @@ class ResNetBottleNeckStack(nn.Module):
             stride = 2,
             depth = 2,
         ):
+        super().__init__()
         self.layers = nn.Sequential(
             ResNetBottleNeckLayer(
                 in_channels=in_channels,
@@ -128,6 +136,51 @@ class ResNetBottleNeckStack(nn.Module):
             ],
         )
 
+    def forward(self, x):
+        return self.layers(x)
 
+class Encoder(nn.Module):
+    """
+    ResNet Encoder that trans 2D feature map:
+    (Batch_size, Channel_image, Height_image, Width_image) =>
+    (Batch_size, Channel_feature_map, Height_feature_map, Width_feature_map)
+
+    config defines feature dimension and (width,height) scaling per layer and repetition per layer:
+    {
+        "image_channels":int,
+        "image_width":int,
+        "image_height":int,
+        "stack_configs": [
+            {
+                "in_channels":int, # For the existance of embedding layer, the first in_channels not necessarily equal to 3(RGB)
+                "out_channels":int,
+                "stride":int, # control the scaling of feature map,
+                "depth":int, # control repetition of basic BottleNeckLayer in the stack
+            },
+            {
+                "in_channels":int,
+                "out_channels":int,
+                "stride":int, # control the scaling of feature map,
+                "depth":int, # control repetition of basic BottleNeckLayer in the stack
+            },
+        ]
+    }
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.embed = ResNetEmbedding(config["image_channels"],config["stack_configs"][0]["in_channels"])
+        self.stacks = nn.Sequential(*[
+            ResNetBottleNeckStack(
+                in_channels= stack_config["in_channels"],
+                out_channels= stack_config["out_channels"],
+                stride= stack_config["stride"],
+                depth= stack_config["depth"],
+            )
+            for stack_config in config["stack_configs"]
+        ])
+
+    def forward(self, x):
+        x = self.embed(x)
+        return self.stacks(x)
 
 
