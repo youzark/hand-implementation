@@ -38,7 +38,8 @@ class ShortCut(nn.Module):
     def __init__(self,
                  in_channels : int,
                  out_channels : int,
-                 stride : int = 1 # stride here basically mean upsampling factor in deconvolution
+                 stride : int = 1, # stride here basically mean upsampling factor in deconvolution
+                 output_padding: int = 0,
                  ):
         """
         if in_channels and out_channels mismatch
@@ -52,6 +53,7 @@ class ShortCut(nn.Module):
             out_channels = out_channels,
             kernel_size = 1,
             stride= stride,
+            output_padding = output_padding,
             bias= True
         )
 
@@ -93,7 +95,8 @@ class ResBlock(nn.Module):
         self.shortcut = ShortCut(
             in_channels= in_channels,
             out_channels= out_channels,
-            stride= stride
+            stride= stride,
+            output_padding= output_padding
         )
         self.activation = nn.ReLU()
 
