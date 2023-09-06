@@ -19,7 +19,8 @@ class BasicConvBlock(nn.Module):
             out_channels = out_channels,
             kernel_size = kernel_size,
             stride = stride,
-            padding = kernel_size // 2
+            padding = kernel_size // 2,
+            bias= False
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = activation
